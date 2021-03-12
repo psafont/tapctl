@@ -1,7 +1,12 @@
 open Forkhelpers
 open Xapi_stdext_unix
-open Xapi_stdext_std.Listext
 open Xapi_stdext_threads.Threadext
+
+module IntRevSet = Set.Make (struct
+  type t = int
+
+  let compare i o = Int.compare o i
+end)
 
 (* Tapdisk stats *)
 module Stats = struct
@@ -108,12 +113,12 @@ module Dummy = struct
     Unixext.write_string_to_file filename str
 
   let find_next_unused_number list =
-    if List.length list = 0 then
-      0
-    else
-      let list_plus_one = List.map (( + ) 1) list in
-      let diff = List.set_difference list_plus_one list in
-      List.hd diff
+    let numbers = IntRevSet.of_list list in
+    IntRevSet.fold
+      (fun n acc ->
+        let succ = n + 1 in
+        if not (IntRevSet.mem succ numbers) then succ else acc)
+      numbers 0
 
   let find_next_unused_minor list =
     let minors = List.filter_map (fun t -> t.d_minor) list in
