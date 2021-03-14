@@ -445,37 +445,26 @@ let list ?t ctx =
       (fun line ->
         (* Note the filename can include spaces, for example: *)
         (* pid=855 minor=0 state=0 args=aio:/run/sr-mount/dev/disk/by-id/ata-WDC_WD2502ABYS-18B7A0_WD-WCAT1H334077-part3/win8 0 *)
-        try
-          let fields =
-            Xapi_stdext_std.Xstringext.String.split ~limit:4 ' ' line
-          in
-          let assoc =
-            List.filter_map
-              (fun field ->
-                match String.split_on_char '=' field with
-                | x :: ys ->
-                    Some (x, String.concat "=" ys)
-                | _ ->
-                    None)
-              fields
-          in
-          let args =
-            try
-              match String.split_on_char ':' (List.assoc "args" assoc) with
-              | ty :: arguments ->
-                  Some (ty, String.concat ":" arguments)
-              | _ ->
-                  None
-            with _ -> None
-          in
-          Some
-            ( {
-                tapdisk_pid= int_of_string (List.assoc "pid" assoc)
-              ; minor= int_of_string (List.assoc "minor" assoc)
-              }
-            , List.assoc "state" assoc
-            , args )
-        with _ -> None)
+        match Astring.String.fields ~empty:false ~is_sep:(( = ) ' ') line with
+        | pid :: minor :: state :: args_list ->
+            let ( let* ) = Option.bind in
+            let scanf = Scanf.ksscanf in
+            let* tapdisk_pid =
+              scanf pid (fun _ _ -> None) "pid=%u" (fun pid -> Some pid)
+            in
+            let* minor =
+              scanf minor (fun _ _ -> None) "minor=%u" (fun minor -> Some minor)
+            in
+            let* state =
+              scanf state (fun _ _ -> None) "state=%s" (fun state -> Some state)
+            in
+            let* _, args =
+              Astring.String.cut ~sep:"args=" (String.concat " " args_list)
+            in
+            let args = Astring.String.cut ~sep:":" args in
+            Some ({tapdisk_pid; minor}, state, args)
+        | _ ->
+            None)
       lines
 
 let is_paused ctx t =
